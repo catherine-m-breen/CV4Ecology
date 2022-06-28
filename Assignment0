@@ -1,0 +1,451 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# **Catherine Breen \
+# Assignment 0**
+# #### **note**: I plan to add a little bit more code over the weekend/before Monday, but I wanted to submit what I had so far!
+
+# # Data Visualization
+
+# I will be building a model to detect weather from camera traps. Currently, the only way to truly "know" what is rain or snow from a camera trap is to use a fancy device called a disdrometer. It measures the speed and size of precipitation droplets to differentiate between rain and snow. However, this device is costly and hard to install in remote terrain. Cameras on the other hand can take pictures daily, hourly and detect visual differences between rain and snow. For example, there are some differences: snow tends to look big, round and white, and rain tends to look more "streak-y." Other work has differentiated the two using histograms, lighting, etc. We hope to build a model that can accurately differentiate between the two so that future work could install cameras instead of disdrometers and pick up rain and snow for wildlife and other ecological studies.
+# 
+# For the class, I will be combining two datasets. One dataset is from a wildlife camera network in Norway (from herein called the Norway dataset). This dataset is your normal wildlife camera dataset. The other dataset is a dataset from Washington that had a disdrometer next to it. Hypothetically these image lables are less "noisy" than the Norway dataset since sometimes we didn't totally know in the Norway dataset what was rain and what was snow. However, in the Washington dataset, there was a daylight savings shift and a couple places where the disdrometer and camera were off by a day so there is some noise in that too. 
+
+# In[2]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+# In[3]:
+
+
+## labels
+norwayLabels = pd.read_csv('/Users/cmbreen/Documents/Chapter 2/fullData_glob2.csv')
+radiometerLabels = pd.read_csv('/Users/cmbreen/Documents/Chapter 1/CV4EcologyData/LabeledData_Radiometer_QC/labelsQC/radiometerImages_QC.csv')
+
+
+# ## Norway preprocessing data
+
+# In[4]:
+
+
+data1 = norwayLabels[['File', 'Date', 'Time', 'SnowCover', 'Temperature', 'Weather']]
+data1 = data1.drop_duplicates().reset_index(drop=True) ## we had two labelers so there is some overlap in images
+data1['location'] = [file.split('_', 1)[0] for file in data1['File']]
+#data1.head()
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# ## Snoqualimie preprocessing 
+# 
+# This is an ancillary dataset that had the fancy disdrometer next to it for additional QA/QC
+
+# In[5]:
+
+
+data2 = radiometerLabels[['File', 'Date', 'Time', 'SnowCover', 'Temperature', 'Weather', 'location']]
+data2 = data2.drop_duplicates().reset_index(drop=True) ## we had two labelers so there is some overlap in images
+#data2.head()
+
+
+# ## Merge datasets
+# We will use concat to merge the two datasets to visualize all labels and sequences we have
+
+# In[6]:
+
+
+data = pd.concat([data1, data2]).reset_index(drop=True) 
+
+
+# In[7]:
+
+
+images = data['File']
+annotations = data['Weather']
+categories = pd.unique(data['Weather'])
+#train_categories = set([ann['category_id'] for ann in annotations])
+locations = list(pd.unique(data['location']))
+im_to_cat = {data['File'][i]: data['Weather'][i] for i in range(0,len(data['File']))}
+
+
+# In[8]:
+
+
+print('High-level statistics:\n')
+
+print('Images: '+str(len(images)))
+print('Annotations: '+str(len(annotations)))
+print('Categories: ' + str(len(categories)))
+print('Weather Images: ' + str(len([data['Weather'] for weather in annotations if (weather == 'Snow') or (weather == 'Rain') or (weather == 'Fog')])))
+print('Weather Labels: ' + str(pd.unique(data['Weather'])))
+print('Empty Images: '+ str(len([data['Weather'] for weather in annotations if (weather == 'None')])))
+print('Locations: ' + str(len(locations)))
+print('Days: ' + str(len(pd.unique(data['Date']))))
+
+
+# In[9]:
+
+
+plt.rcParams['figure.figsize'] = [12, 6]
+plt.rcParams['figure.dpi'] = 100
+images_per_category = pd.DataFrame(annotations.value_counts()).reset_index().rename(columns={'index':'labels', 'Weather':'Weather'})
+#for im in images:
+ # images_per_category[im_to_cat[im['file']]].append(im['file'])
+ind = range(len(images_per_category['labels']))
+plt.bar(ind, images_per_category['Weather'],edgecolor = 'b', log=True)
+plt.xlabel('Category')
+plt.xticks(ind, labels = ['None', 'Snow', 'Fog', 'Rain', 'other'])
+plt.ylabel('Number of images')
+plt.title('Images per category')
+plt.grid(b=None)
+plt.tight_layout()
+plt.tick_params(axis='x', which='both', bottom=True, top=False)
+plt.tick_params(axis='y', which='both', right=False, left=True)
+plt.show()
+
+
+# In[10]:
+
+
+plt.rcParams['figure.figsize'] = [12, 6]
+locs = [locations[1], locations[2], locations[3]]
+
+images_per_category_per_loc = {}
+for loc in locations:
+    images_per_location = data[data['location'] == loc]
+    none, Snow, Rain, Fog = sum(images_per_location['Weather'] == 'None'),         sum(images_per_location['Weather'] == 'Snow'), sum(images_per_location['Weather'] == 'Rain'),         sum(images_per_location['Weather'] == 'Fog')
+    df = pd.DataFrame({'labels': ['None', 'Snow', 'Rain', 'Fog'], 'Weather':[none, Snow, Rain, Fog]})
+    images_per_category_per_loc[loc] = df
+
+ind = range(0,4)
+
+for idx, loc in enumerate(locs):
+  plt.subplot(3,1,idx+1)
+  plt.bar(ind, images_per_category_per_loc[loc]['Weather'], log=True)
+  plt.xlabel('Category')
+  plt.ylabel('Number of images')
+  plt.xticks(ind, labels = ['None', 'Snow', 'Fog', 'Rain'])
+  plt.title('Location: '+str(loc))
+  plt.grid(b=None)
+  plt.tight_layout()
+  plt.tick_params(axis='x', which='both', bottom=True, top=False)
+  plt.tick_params(axis='y', which='both', right=False, left=True)
+plt.show()
+
+
+# In[196]:
+
+
+images_per_location = {loc:[] for loc in locations}
+
+for loc in locations: 
+    images_per_location1 = data[data['location'] == loc]
+    number_of_images = len(images_per_location1['File'])
+    images_per_location[str(loc)].append(number_of_images)
+    
+images_per_location['2000'] = images_per_location.pop('SNQradiometer')
+
+ind = range(len(locations))
+keysList = list(images_per_location.keys())
+keysInt = sorted([int(x) for x in keysList])
+
+images_per_location = pd.DataFrame.from_dict(images_per_location, orient = 'index',columns = ['values'])
+
+plt.bar(keysInt,images_per_location['values'], width = 10, log=True)
+plt.xlabel('Location')
+plt.ylabel('Number of images')
+plt.title('Images per location')
+plt.grid(False)#b=None)
+plt.tight_layout()
+plt.tick_params(axis='x', which='both', bottom=True, top=False)
+plt.tick_params(axis='y', which='both', right=False, left=True)
+plt.show()
+
+
+# In[233]:
+
+
+#images_per_location = {loc:[] for loc in locations}
+#for im in images:
+#  categories_per_location[im['location']].append(im_to_cat[im['id']])
+
+
+# # Prompt 2: load one of your images or videos and visualize it
+# 
+# I have an azure account, so I will run this again on my azure account and update the paths so that everything is ready by August. 
+
+# I will visualize one example of each label: None, Rain, and Snow, Fog
+
+# import os
+# import glob #for loading images from a directory
+# import matplotlib.image as mpimg
+# import matplotlib.pyplot as plt
+# import cv2
+# import random
+# import numpy as np
+# import pandas as pd
+# from PIL import Image
+# from urllib.request import urlopen
+# from PIL.ExifTags import TAGS 
+# from scipy import ndimage
+
+# If we try to load in all the images in this case, the system crashes, because I am running this locally. So I am just going to pull 5 of each examples and display those. 
+
+# In[350]:
+
+
+inputImages = {'snow':[], 'rain':[], 'fog':[], 'none':[]}
+
+
+## update this as the time comes 
+norwayPath = "/Users/cmbreen/Documents/Mac2020/labeled/"
+SNQradiometerPath = ''
+SNQtowerPath = ''
+####
+
+for file in glob.glob(norwayPath + str("*")): ## this crashes when run locally 
+    if os.path.splitext(file)[1].lower() in ('.jpg', '.jpeg'):
+        filename = file.split('/')[-1]
+        #print(filename)
+        index = data[data['File'] == filename].index
+        weather = (data['Weather'][index].values.tolist())
+        if sum(len(inputImages[key]) for key in inputImages.keys()) < 20:
+            if (weather == ['Snow']) and (len(inputImages['snow']) < 5):
+                #print('snow')
+                image = cv2.imread(file)
+                inputImages['snow'].append(image)
+            elif (weather == ['Rain']) and (len(inputImages['rain']) < 5):
+               # print('rain')
+                image = cv2.imread(file)
+                inputImages['rain'].append(image)
+            elif (weather == ['None']) and (len(inputImages['none']) < 5):
+                #print('none')
+                image = cv2.imread(file)
+                inputImages['none'].append(image)
+            elif (weather == ['Fog']) and (len(inputImages['fog']) < 5):
+                #print('fog')
+                image = cv2.imread(file)
+                inputImages['fog'].append(image)
+            else: pass
+        else: break
+
+
+# In[351]:
+
+
+# create figure plots
+def show_images(labeled_dictionary):
+    fig = plt.figure(figsize=(10, 7))
+    rows = 2
+    columns = 2
+
+    fig.add_subplot(rows, columns, 1)
+    plt.imshow(labeled_dictionary[0])
+
+    fig.add_subplot(rows, columns, 2)
+    plt.imshow(labeled_dictionary[1])
+
+    fig.add_subplot(rows, columns, 3)
+    plt.imshow(labeled_dictionary[2])
+
+    fig.add_subplot(rows, columns, 4)
+    plt.imshow(labeled_dictionary[4])
+
+
+# ## Snow Image Examples
+
+# In[352]:
+
+
+show_images(inputImages['snow'])
+
+
+# ## Rain Image Examples
+
+# In[353]:
+
+
+show_images(inputImages['rain'])
+
+
+# ## Fog Image Examples
+
+# In[354]:
+
+
+show_images(inputImages['fog'])
+
+
+# ## 'None' (i.e. no weather) Image Examples
+
+# In[355]:
+
+
+show_images(inputImages['none'])
+
+
+# ## Sequences
+# 
+# One thing I want to learn how to do (because I don't yet!) is how to build in logic that takes into account time. I will preview by looking through the data file and find a weather image (1 for rain and 1 for snow) and whether there are any images from the day before or the day after. If that time step doesn't work, I will increase the time step to 2 days and so on. 
+
+# I will visualize twos sequences: 
+# 1. None, Rain, None (but snow decreases) 
+# 2. None, Snow, None (but snow decreases)
+# 
+# The example will demonstrate how we may be able to use before and after pictures to influence model accuracy 
+
+# In[364]:
+
+
+def sequenceLookup(date, location):
+    ## subset dataframe of location
+    cameraIDsubset = data[data['location'] == location]
+    timestamp = pd.to_datetime(date)
+    
+    ## turn date column into datetime column to be able to find time deltas
+    times = pd.to_datetime(cameraIDsubset['Date'])
+    files = cameraIDsubset['File']
+    
+    before = []
+    after = []
+    sequence = []
+    ## find all the images that are close to it in time
+    for (file, t) in zip(files, times):
+        difference = timestamp - t
+        diff = difference.total_seconds()  #days
+        if abs(diff) <= 100000: ### a little bit more than the number of seconds in a day
+            if diff > 0: before.append(file)
+            else: after.append(file)
+    
+    #dictionary.update({filename: sequence})
+
+    after = sorted(after)
+    before = sorted(before)
+    
+    return {filename:[before,after]}
+   
+    ##### find if any of those images are at that same camera 
+
+
+# ### Sequence lookup 
+# 
+# This will create a dictionary of images of interest. The keys will be weather images for snow or rain. The values will be images right before or right after. In this case we set the time delta as 100,000 or a little bit more than the number of seconds in a day. 
+# 
+# Above, we defined sequenceLookup to look up the images that are at the camera around the same day.
+
+# In[365]:
+
+
+#sequenceLookup(date = date, location = location)
+
+
+# In[367]:
+
+
+rainSequences = {}
+snowSequences = {}
+
+for file in glob.glob(norwayPath + str("*")): ## this crashes when run locally 
+    if os.path.splitext(file)[1].lower() in ('.jpg', '.jpeg'):
+        filename = file.split('/')[-1]
+        index = data[data['File'] == filename].index
+        weather = (data['Weather'][index].values.tolist())[0]
+        date =  (data['Date'][index].values.tolist())[0]
+        location = (data['location'][index].values.tolist())[0]
+        if (weather == 'Snow'): 
+            snowSequences.update(sequenceLookup(date = date, location = location))
+        elif (weather == 'Rain'):
+            rainSequences.update(sequenceLookup(date = date, location = location))
+
+
+# In[372]:
+
+
+print('High-level sequence statistics:\n')
+
+print('Rain Sequences: '+str(len(rainSequences)))
+print('Snow Sequences: '+str(len(snowSequences)))
+
+
+# In[371]:
+
+
+## preview sequences
+
+image = list(snowSequences.keys())[0]
+before = list(snowSequences.values())[0][0][-1] ## image right before image of interest
+after = list(snowSequences.values())[0][1][0] ## image right after image of interest
+
+fig = plt.figure(figsize=(10, 7))
+rows = 1
+columns = 3
+
+fig.add_subplot(rows, columns, 1)
+plt.imshow(cv2.imread(norwayPath + image))
+plt.title('before')
+
+fig.add_subplot(rows, columns, 2)
+plt.imshow(cv2.imread(norwayPath + before))
+plt.title('snow image')
+
+fig.add_subplot(rows, columns, 3)
+plt.imshow(cv2.imread(norwayPath + after))
+plt.title('after')
+
+
+# In[373]:
+
+
+## preview sequences
+
+image = list(rainSequences.keys())[0]
+before = list(rainSequences.values())[0][0][-1] ## image right before image of interest
+after = list(rainSequences.values())[0][1][0] ## image right after image of interest
+
+fig = plt.figure(figsize=(10, 7))
+rows = 1
+columns = 3
+
+fig.add_subplot(rows, columns, 1)
+plt.imshow(cv2.imread(norwayPath + image))
+plt.title('before')
+
+fig.add_subplot(rows, columns, 2)
+plt.imshow(cv2.imread(norwayPath + before))
+plt.title('rain image')
+
+fig.add_subplot(rows, columns, 3)
+plt.imshow(cv2.imread(norwayPath + after))
+plt.title('after')
+
+
+# # Takeaways
+# 
+# Still some noise, still need bigger sample size.
+# 
+# To do items: 
+# 
+# - build more sequences
+# - have more weather images
+# - have more weather images from certain cameras
+# - organize images into folders and quality control for final check
+
+# In[ ]:
+
+
+
+
